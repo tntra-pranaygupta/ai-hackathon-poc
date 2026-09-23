@@ -9,14 +9,14 @@ from datetime import datetime, timedelta, timezone
 import anyio
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Fixed, precomputed dummy hash used to keep login timing comparable when the
 # looked-up email does not exist (specs/user-auth/plan.md Risks section).
@@ -64,14 +64,17 @@ def _unauthorized() -> HTTPException:
     )
 
 
-async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> int:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> int:
     """FastAPI dependency: decodes the bearer JWT and returns the user id.
 
     Raises 401 if the token is missing, malformed, expired, or has an
     invalid signature. Does not hit the database.
     """
-    if token is None:
+    if credentials is None:
         raise _unauthorized()
+    token = credentials.credentials
     try:
         payload = jwt.decode(
             token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
